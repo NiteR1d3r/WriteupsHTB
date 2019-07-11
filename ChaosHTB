@@ -8,6 +8,7 @@ difficulty - Hard
 |    /|  /_ | |_/|  | |/\||| \_/|| |_/\| |     | || | \||  | |  |  /_ | |_/\| |_/\| || |_//|  /_ | | \|||  \_ |  /_   
 \_/\_\\____\\____/  \_/  \|\____/\____/\_/     \_/\_/  \|  \_/  \____\\____/\____/\_/\____\\____\\_/  \|\____/\____\  
 
+Being moved to blog soon...
 
 This box is Chaos from Hack the box and was one heck of a ride as this one was all over the place.
 We first enumerate as usual and find some interesting ports open. including pop 110 and imap
