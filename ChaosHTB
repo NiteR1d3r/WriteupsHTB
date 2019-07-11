@@ -3,6 +3,12 @@ Chaos HTB
 Linux 
 difficulty - Hard
 
+/  __\/  __//  _ \  / \  /|/  _ \/ \   /    /  / \/ \  /|/__ __\/  __// \   / \   / \/  __//  __// \  /|/   _\/  __/  
+|  \/||  \  | | \|  | |  ||| / \|| |   |  __\  | || |\ ||  / \  |  \  | |   | |   | || |  _|  \  | |\ |||  /  |  \    
+|    /|  /_ | |_/|  | |/\||| \_/|| |_/\| |     | || | \||  | |  |  /_ | |_/\| |_/\| || |_//|  /_ | | \|||  \_ |  /_   
+\_/\_\\____\\____/  \_/  \|\____/\____/\_/     \_/\_/  \|  \_/  \____\\____/\____/\_/\____\\____\\_/  \|\____/\____\  
+
+
 This box is Chaos from Hack the box and was one heck of a ride as this one was all over the place.
 We first enumerate as usual and find some interesting ports open. including pop 110 and imap
 which got me curious right away about what was going on there. 
