@@ -173,7 +173,7 @@ we know that upon install this runs with the privs of the root
 user based off what we already know about Linux and installing 
 them normally. 
 
-We now find a clear aread to inject our one liner in the bash script -
+We now find a clear spot to inject our one liner in the bash script -
 
 "cp /root/root.txt /tmp/loot && chmod 777 /tmp/loot"
 
