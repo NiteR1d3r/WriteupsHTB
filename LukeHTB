@@ -46,8 +46,8 @@ which took a username and password so figured lets look around the site and see
 if anything is around or exploitable.
 
 While digging found config.php for the webapp and found a set of database creds. 
-With no database port open we take a look at the node.js server and see what is
-going on there and maybe our creds will work for a jwt token.
+With no normal database port open we take a look at the node.js server and see what is
+going on there and maybe our creds will work for a jwt token to abuse.
 
 --------------------------------------------------------------------------------------------------]
 
